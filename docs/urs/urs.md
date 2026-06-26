@@ -13,6 +13,7 @@ Rubin Ronchieri Byrd
 | ------- | ---------- | -------------------- | ------------------------------------------------------------------------------------------------------------ |
 | 1.0     | 2026-06-07 | Rubin Ronchieri Byrd | First complete draft of the Disassembly Wizard URS.                                                          |
 | 2.0     | 2026-06-12 | Whole third group    | Added things from Giallombardo-Bricola-DeVecchi group and revised with all the others component of the group |
+| 3.0     | 2026-06-24 |                      |                                                                                                              |
 
 # Table of Contents
 
@@ -34,25 +35,13 @@ Rubin Ronchieri Byrd
 
 ## 1. Introduction
 
-This document is the User Requirements Specification for the **Disassembly Wizard**, a new application to be developed within the Futurdata thesis project on Critical Raw Material recovery from end-of-life products. The Wizard builds on the existing Disassembly Flow Diagram Builder: it takes the disassembly model the Builder produces — an AND/OR graph stored as JSON — and turns it into instructions a technician can actually follow to take a product apart, while recording the data needed to decide what to do with each recovered part. This introduction states the document's scope, the terminology used throughout, and the external references the specification relies on.
-
--
-
-<a name="sp1.1"></a>
-
 ### 1.1 Document Scope
 
-This document specifies the user requirements for the **Disassembly Wizard**, a new application that does not yet exist and is to be designed from scratch (step zero).
+The Wizard consumes a disassembly model expressed as a JSON file — the same format produced by the existing **Disassembly Flow Diagram Builder** application— and turns it into human-usable disassembly instructions. Accordingly, the model encodes the product as an AND/OR graph of components (Root, Composite, Leaf), composite operations (diamonds) and sequential atomic sub-steps (action circles).
 
-The Wizard consumes a disassembly model expressed as a JSON file — the same format produced by the existing **Disassembly Flow Diagram Builder** — and turns it into human-usable disassembly instructions. The model encodes the product as an AND/OR graph of components (Root, Composite, Leaf), composite operations (diamonds) and sequential atomic sub-steps (action circles).
+The scope of this URS covers: importing and validating the JSON model, letting the operator choose the desired depth of disassembly at runtime, guiding the operator step-by-step through the disassembly, capturing data during execution (quality grading, optionally measured weight), **and producing a menu within multiple output formats can be chosen.**
 
-The scope of this URS covers: importing and validating the JSON model, letting the operator choose the desired depth of disassembly at runtime, guiding the operator step-by-step through the disassembly, capturing data during execution (quality grading, optionally measured weight), and producing two outputs — a procedural disassembly guide and a decisional recovery report.
 
-The following are explicitly **out of scope** for this version and are recorded only as future enhancements where relevant: the assembly (reverse) direction, the post-export enrichment workflow ("phase two"), and any modification of the source JSON.
-
-This document describes *what* the Wizard must do from the user's point of view; it does not prescribe implementation, architecture or technology choices beyond constraints required for interoperability with the existing toolchain.
-
- Define the requirements for a python software that allows to see a wizard of the process of dismounting things, through an HTML+JS interactive page / PDF wizard / MP4 video
 
 <a name="sp1.2"></a>
 
@@ -77,6 +66,11 @@ This document describes *what* the Wizard must do from the user's point of view;
 | GUI              | Graphical User Interface.                                                                                                                                                         |
 | Procedural guide | The first Wizard output: ordered, human-readable disassembly instructions.                                                                                                        |
 | Recovery report  | The second Wizard output: the decisional summary of component destinations, gradings and recoverable materials.                                                                   |
+| PDFExporter      | Class to export wizard in PDF format                                                                                                                                              |
+| HTMLExporter     | Class to export wizard in HTML(+JS) interactive format                                                                                                                            |
+| PPTXExporter     | Class to export wizard in PowerPoint ( >= 2007) format                                                                                                                            |
+| DOCXExporter     | Class to export wizard in Word ( >= 2007) format                                                                                                                                  |
+| ExportMethod     | Upper class or structure or array that "contains" the export methods specified above                                                                                              |
 
 <a name="sp1.3"></a>
 
@@ -114,10 +108,17 @@ The objectives of the Disassembly Wizard are:
 1. **Consume a disassembly model.** Import a JSON model through a GUI and parse it into the internal AND/OR graph representation.
 2. **Guarantee model validity before use.** Validate the structure and grammar of the model, report any problems precisely, and let the operator make an informed decision to proceed or fix the model.
 3. **Let the operator choose the disassembly depth.** Offer mutually exclusive disassembly-level options (full disassembly, keep main assemblies, manual selection of sub-roots) before generating the guide.
-4. **Guide disassembly in real time.** Walk the operator through the steps following the graph order, in execution mode.
-5. **Capture recovery-relevant data.** Record a configurable quality grading per component and, where applicable, supporting data needed for the recovery decision.
-6. **Produce usable outputs.** Generate a procedural disassembly guide (PDF, and optionally video) and a decisional recovery report.
-7. **Support CRM recovery.** Surface the components and materials that matter for Critical Raw Material recovery in the recovery report.
+4. ~~**Guide disassembly in real time.** Walk the operator through the steps following the graph order, in execution mode.~~
+5. ~~**Capture recovery-relevant data.** Record a configurable quality grading per component and, where applicable, supporting data needed for the recovery decision.~~
+6. ~~**Produce usable outputs.** Generate a procedural disassembly guide (PDF, and optionally video) and a decisional recovery report.~~
+7. ~~**Support CRM recovery.** Surface the components and materials that matter for Critical Raw Material recovery in the recovery report.~~
+8. **Produce an interface where the user can select the output format. That interface has to be modular in order to add formats whenever we want
+	1. PDF
+	2. TXT (plain text) file
+	3. MD (markdown) file
+	4. HTML+JS interactive page
+	5. PPTX file
+	6. DOCX file
 
 <a name="p3"></a>
 
@@ -144,37 +145,43 @@ The objectives of the Disassembly Wizard are:
 <a name="sp3.2"></a>
 ### 3.2 Functional Requirements
 
-| ID   | Description                                                                                                                                                                                                                                          | Priority |
-| ---- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
-| 1.0  | The Wizard shall let the user select and load a JSON model through the GUI (file picker).                                                                                                                                                            | M        |
-| 1.1  | The Wizard shall parse the loaded JSON into the internal AND/OR graph representation (Root, Composite, Leaf components; diamonds; action circles; connections).                                                                                      | M        |
-| 1.2  | The Wizard shall treat the input JSON as read-only and never modify the source file.                                                                                                                                                                 | M        |
-| 1.3  | The system should allow the user to see, at the top of the generated wizard, the bill of materials and the tools that are required to disassemble the OBJ                                                                                            | M        |
-| 2.0  | The Wizard shall validate the grammar of the model: a single Root, valid node types, and connections consistent with the diamond / action-circle / component roles .                                                                                 | M        |
-| 2.1  | The Wizard shall detect topological anomalies, including cycles, multiple roots, and orphan (disconnected) nodes.                                                                                                                                    | M        |
-| 2.2  | The Wizard shall report validation problems as precise, point-by-point warnings that identify exactly which element(s) of the JSON are affected and why.                                                                                             | M        |
-| 2.3  | The Wizard shall allow the user to proceed despite validation warnings; in that case the responsibility for any resulting incorrect instructions rests with the user.                                                                                | M        |
-| 2.4  | For each diamond node (action) of the diagram opened by the user, the system should check if the weight of the input node of the diamond is equal to the sum of the weight of its child nodes                                                        | D        |
-| 3.0  | Before generating the guide, the Wizard shall let the user choose the disassembly **depth** via mutually exclusive options: full disassembly, keep main assemblies whole, or manual selection of components to keep united. (BFS with limited depth) | M        |
-| 3.1  | The Wizard shall let the user designate a node as a sub-root, keeping it as a single block and pruning the subtree below it from the generated procedure.                                                                                            | M        |
-| 3.2  | The Wizard shall request explicit confirmation of the chosen disassembly depth before generating the disassembly guide.                                                                                                                              | M        |
-| 4.0  | The system should show other informations related to each dismounted node, such as quality, color, material, weight... (if materials and weight are known to us, cause it's difficult to find them on a manual)                                      | O        |
-| 4.1  | The system should take the print the text and the image associated to every node (circle, diamond, rectangle...) of the diagram and print it in the wizard                                                                                           | M        |
-| 5.0  | The Wizard shall let the operator assign a quality grading to each component from a configurable, fixed list of options (e.g. Working, Broken, Refurbishable, Recover material only) — a closed selection, not free text.                            | M        |
-| 5.1  | The Wizard shall derive a recovery destination (e.g. resell, scrap, recover material) from the assigned grading.                                                                                                                                     | M        |
-| 5.2  | The Wizard shall let the operator record the measured (actual) weight of a component during execution, in addition to the nominal weight carried by the JSON.                                                                                        | D        |
-| 6.0  | The Wizard shall generate a procedural disassembly guide in PDF, exportable and shareable.                                                                                                                                                           | M        |
-| 6.1  | The Wizard shall generate the procedural disassembly guide in video form.                                                                                                                                                                            | D        |
-| 6.2  | The system should allow the user to move/edit the text generated in the wizard and the images generated in the wizard (to revise the wizard)                                                                                                         | O        |
-| 7.0  | The Wizard shall generate a decisional recovery report covering, per component, its grading, destination, material and weight, including any sub-roots kept whole.                                                                                   | M        |
-| 7.1  | The recovery report shall highlight components and materials relevant to Critical Raw Material recovery, with their recoverable weight.                                                                                                              | D        |
-| 7.2  | The recovery report shall provide aggregated recovery summaries (e.g. mass per destination, recovery percentage, weight per material).                                                                                                               | D        |
-| 8.0  | The Wizard shall let the user save and resume a session, preserving the chosen options and the data collected during execution.                                                                                                                      | D        |
-| 9.0  | The Wizard shall provide an aggregated summary of the tools required and of any safety notices extracted from the steps.                                                                                                                             | E        |
-| 9.1  | The Wizard shall export a structured Bill of Materials (e.g. CSV/JSON) in addition to the human-readable outputs.                                                                                                                                    | E        |
-| 9.2  | The Wizard shall support a two-step workflow in which a general nominal guide is exported first and real measured details are entered in a later enrichment phase.                                                                                   | E        |
-| 9.3  | The Wizard shall support localization of the generated guide into multiple languages.                                                                                                                                                                | E        |
-| 10.0 | The system should group the steps having the same diamond action as parent (in order to print those steps in just one paragraph or bulleted list)                                                                                                    | M        |
+| ID       | Description                                                                                                                                                                                                                                                                          | Priority |
+| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------- |
+| 1.0      | The Wizard shall let the user select and load a JSON model through the GUI (file picker).                                                                                                                                                                                            | M        |
+| 1.1      | The Wizard shall parse the loaded JSON into the internal AND/OR graph representation (Root, Composite, Leaf components; diamonds; action circles; connections).                                                                                                                      | M        |
+| 1.2      | The Wizard shall treat the input JSON as read-only and never modify the source file.                                                                                                                                                                                                 | M        |
+| 1.3      | The system should allow the user to see, at the top of the generated wizard, the bill of materials and the tools that are required to disassemble the OBJ                                                                                                                            | M        |
+| 2.0      | The Wizard shall validate the grammar of the model: a single Root, valid node types, and connections consistent with the diamond / action-circle / component roles . It has also to detect topological anomalies, including cycles, multiple roots, and orphan (disconnected) nodes. | M        |
+| ~~2.1~~  | ~~The Wizard shall detect topological anomalies, including cycles, multiple roots, and orphan (disconnected) nodes.~~                                                                                                                                                                | ~~M~~    |
+| 2.2      | The Wizard shall report validation problems as precise, point-by-point warnings that identify exactly which element(s) of the JSON are affected and why.                                                                                                                             | M        |
+| 2.3      | The Wizard shall allow the user to proceed despite validation warnings; in that case the responsibility for any resulting incorrect instructions rests with the user.                                                                                                                | M        |
+| 2.4      | For each diamond node (action) of the diagram opened by the user, the system should check if the weight of the input node of the diamond is equal to the sum of the weight of its child nodes                                                                                        | D        |
+| 3.0      | Before generating the guide, the Wizard shall let the user choose the disassembly **depth** via mutually exclusive options: full disassembly, keep main assemblies whole, or manual selection of components to keep united. (BFS with limited depth)                                 | M        |
+| ~~3.1~~  | ~~The Wizard shall let the user designate a node as a sub-root, keeping it as a single block and pruning the subtree below it from the generated procedure.~~                                                                                                                        | ~~M~~    |
+| ~~3.2~~  | ~~The Wizard shall request explicit confirmation of the chosen disassembly depth before generating the disassembly guide.~~                                                                                                                                                          | ~~M~~    |
+| 4.0      | The system should show other informations related to each dismounted node, such as quality, color, material, weight... (if materials and weight are known to us, cause it's difficult to find them on a manual)                                                                      | O        |
+| 4.1      | The system should take the print the text and the image associated to every node (circle, diamond, rectangle...) of the diagram and print it in the wizard                                                                                                                           | M        |
+| 5.0      | The Wizard shall let the operator assign a quality grading to each component from a configurable, fixed list of options (e.g. Working, Broken, Refurbishable, Recover material only) — a closed selection, not free text.                                                            | M        |
+| 5.1      | The Wizard shall derive a recovery destination (e.g. resell, scrap, recover material) from the assigned grading.                                                                                                                                                                     | O        |
+| 5.2      | The Wizard shall let the operator record the measured (actual) weight of a component during execution, in addition to the nominal weight carried by the JSON.                                                                                                                        | D        |
+| 6.2      | The system should allow the user to move/edit the text generated in the wizard and the images generated in the wizard (to revise the wizard)                                                                                                                                         | O        |
+| ~~7.0~~  | ~~The Wizard shall generate a decisional recovery report covering, per component, its grading, destination, material and weight, including any sub-roots kept whole.~~                                                                                                               | ~~O~~    |
+| ~~7.1~~  | ~~The recovery report shall highlight components and materials relevant to Critical Raw Material recovery, with their recoverable weight.~~                                                                                                                                          | ~~O~~    |
+| ~~7.2~~  | ~~The recovery report shall provide aggregated recovery summaries (e.g. mass per destination, recovery percentage, weight per material).~~                                                                                                                                           | ~~O~~    |
+| 8.0      | The Wizard shall let the user save and resume a session, preserving the chosen options and the data collected during execution.                                                                                                                                                      | D        |
+| 9.0      | The Wizard shall provide an aggregated summary of the tools required and of any safety notices extracted from the steps.                                                                                                                                                             | E        |
+| 9.1      | The Wizard shall export a structured Bill of Materials (e.g. CSV/JSON) in addition to the human-readable outputs.                                                                                                                                                                    | E        |
+| ~~9.2~~  | ~~The Wizard shall support a two-step workflow in which a general nominal guide is exported first and real measured details are entered in a later enrichment phase.~~                                                                                                               | ~~E~~    |
+| ~~9.3~~  | ~~The Wizard shall support localization of the generated guide into multiple languages.~~                                                                                                                                                                                            | ~~E~~    |
+| 10.0     | The system should group the steps having the same diamond action as parent (in order to print those steps in just one paragraph or bulleted list)                                                                                                                                    | M        |
+| **11.0** | **The system should allow to add formats in the export panel, also in the future i.e. after the program will have been deployed**                                                                                                                                                    | **M**    |
+| 12.0     | (PDF export format) The system has to export the wizard into a pdf format                                                                                                                                                                                                            |          |
+| 13.0     | (TXT export format) The system has to export the wizard into a txt (plain text) format                                                                                                                                                                                               |          |
+| 14.0     | (MD export format) The system has to export the wizard into a md (markdown) format                                                                                                                                                                                                   |          |
+| 15.0     | (HTML+JS export format) After the wizard has been exported into HTML+JS format, the resulting webpage will have to have back and forward button to let the user to navigate between the steps/actions                                                                                |          |
+| 17.0     | (PPTX export format) The system has to export the file in a pptx format                                                                                                                                                                                                              |          |
+| 18.0     | (DOCX export format) The system has to export the file in a docx format                                                                                                                                                                                                              |          |
+| 19.0     | (All formats) The user should be able to choose how many "pages" (or "group of actions") export in the selected format                                                                                                                                                               | O        |
 
 <a name="sp3.3"></a>
 ### 3.3 Non-Functional Requirements
@@ -189,3 +196,5 @@ The objectives of the Disassembly Wizard are:
 | 3.0 | The Wizard shall run on the same platforms as the Builder (Python / Tk environment).                                                   | D        |
 | 3.1 | The validation engine shall be extensible to accommodate new model-checking rules.                                                     | D        |
 | 4.0 | The Wizard shall load and validate a typical model within interactive response times.                                                  | O        |
+|     |                                                                                                                                        |          |
+|     |                                                                                                                                        |          |
